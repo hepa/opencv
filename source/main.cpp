@@ -22,7 +22,9 @@
 using namespace std;
 
 // don't move bat within this value change
-float threshold = 7.0f;
+float threshold = 9.0f;
+
+int false_detects = 0;
 
 enum State {
 	STARTUP,
@@ -77,12 +79,13 @@ float player1_y = 500;
 
 //position for player2 bat
 float player2_x = 50;
-float player2_y = 100;
+float player2_y = 32;
 //float prev_player2_y = 100;
 
 //Constant dimension for bat
 const float BAT_WIDTH = 30;
 const float BAT_HEIGHT = 100;
+const float BAT_HEIGHT2 = 800;
 
 //Constant dimension for ball
 const float BALL_WIDTH = 30;
@@ -92,8 +95,8 @@ const float BALL_HEIGHT = 30;
 float ball_x;
 float ball_y;
 
-float ballspeed_x = 17.0f;
-float ballspeed_y = 2.0f;
+float ballspeed_x = 26.0f;
+float ballspeed_y = 4.0f;
 
 int player1Score = 0;
 int player2Score = 0;
@@ -150,7 +153,7 @@ int main(int argc, char* argv[])
 	CvSeq* p_seqCircles;
 
 	
-	bool volt = false;
+	int in_process = 1;
 	uchar b, g, r;
 	uchar b2, g2, r2;
 
@@ -205,57 +208,67 @@ int main(int argc, char* argv[])
 		cvCvtColor(p_imgOriginal, p_imgProcessed_hsv, CV_BGR2HSV);
 
 		//yellow color range
-		CvScalar hsv_min_yellow = cvScalar(160, 200, 100 );
+		CvScalar hsv_min_yellow = cvScalar(160, 140, 125 );
 		CvScalar hsv_max_yellow = cvScalar(180,255,255 );
 		
 		//blue color range
-		CvScalar hsv_min_blue = cvScalar(100, 200,120 );
-		CvScalar hsv_max_blue = cvScalar(150,255,255 );
+		CvScalar hsv_min_blue = cvScalar(80, 120,120 );
+		CvScalar hsv_max_blue = cvScalar(130,255,255 );
 
 		//cut picture for two color
 		cvInRangeS(p_imgProcessed_hsv, hsv_min_blue, hsv_max_blue, p_imgProcessed_blue_cut);
 		cvInRangeS(p_imgProcessed_hsv, hsv_min_yellow, hsv_max_yellow, p_imgProcessed_yellow_cut);
 		//cvInRangeS(p_imgOriginal, CV_RGB(160, 0, 0), CV_RGB(255, 60, 60), p_imgProcessed);
-		maxx = 0; maxy = 0; minx = 700; miny = 700;
-		maxx2 = 0; maxy2 = 0; minx2 = 700; miny2 = 700;
-		for (y = 0; y < p_imgProcessed->height; y+=2)
-		{
-			for (col = 0; col < p_imgProcessed->width; col+=2)
-			{
-				//for( z = 0; z < img->nChannels; z++ )
-				//{
-				//   c = img->imageData[img->widthStep * row + col * img->nChannels + z];
-				//}
-				b = p_imgProcessed->imageData[p_imgProcessed->widthStep * y + col * 3];
-				g = p_imgProcessed->imageData[p_imgProcessed->widthStep * y + col * 3 + 1];
-				r = p_imgProcessed->imageData[p_imgProcessed->widthStep * y + col * 3 + 2];
 
-				b2 = p_imgProcessed_blue_cut->imageData[p_imgProcessed_blue_cut->widthStep * y + col * 3];
-				g2 = p_imgProcessed_blue_cut->imageData[p_imgProcessed_blue_cut->widthStep * y + col * 3 + 1];
-				r2 = p_imgProcessed_blue_cut->imageData[p_imgProcessed_blue_cut->widthStep * y + col * 3 + 2];
+		if (in_process == 0) {
+			maxy = 0; miny = 700;
+			maxy2 = 0; miny2 = 700;
+			for (y = 0; y < p_imgProcessed->height; y+=3)
+			{
+				for (col = 0; col < p_imgProcessed->width; col+=3)
+				{
+					int v1 = p_imgProcessed_yellow_cut->widthStep * y + col * 3;
+					b = p_imgProcessed_yellow_cut->imageData[v1];
+					//g = p_imgProcessed_yellow_cut->imageData[v1 + 1];
+					//r = p_imgProcessed_yellow_cut->imageData[v1 + 2];
+
+					int v2 = p_imgProcessed_blue_cut->widthStep * y + col * 3;
+					b2 = p_imgProcessed_blue_cut->imageData[v2];
+					//g2 = p_imgProcessed_blue_cut->imageData[v2+ 1];
+					//r2 = p_imgProcessed_blue_cut->imageData[v2 + 2];
 				
 
-				if (b == 255 && r == 255 && g == 255) {
-					if (y>maxy) maxy = y;
-					if (y < miny) miny = y;
-					
-				}
+					if (b == 255) {
+						if (y>maxy) {
+							maxy = y;							
+						}
+						if (y < miny) {
+							miny = y;												
+						}
+						break;
+					}
 
-				if (b2 == 255 && r2 == 255 && g2 == 255) {
-					if (y>maxy2) maxy2 = y;
-					if (y < miny2) miny2 = y;
-					volt = true;
+					if (b2 == 255) {
+						if (y>maxy2) {
+							maxy2 = y;							
+						}
+						if (y < miny2) {
+							miny2 = y;												
+						}
+						break;
+					}
 				}
 			}
+			in_process = 1;
+			//printf("%d %d\n", miny, maxy);
+		} else {
+			in_process--;
 		}
-
-		//if (volt)	
-		//printf("%d %d %d %d\n", minx2, miny2, maxx2, maxy2);
 		
 
 		//cvShowImage("Original", p_imgOriginal);
-		cvShowImage("Original", p_imgOriginal);
-		cvShowImage("Processed_blue", p_imgProcessed_blue_cut);
+		//cvShowImage("Original", p_imgOriginal);
+		//cvShowImage("Processed_blue", p_imgProcessed_blue_cut);
 		cvShowImage("Processed_yellow", p_imgProcessed_yellow_cut);
 
 			
@@ -265,7 +278,7 @@ int main(int argc, char* argv[])
 		runGameState(DRAW);
 
 		//Stop it from running too fast! Sleep ZZzzz
-		//Sleep(1);		
+		Sleep(1);		
 	} 
 
 	//Before you exit, clean up after yourself
@@ -338,7 +351,7 @@ void mainMenu(SubState a_subState)
 			DrawSprite(bat, player1_x, player1_y, BAT_WIDTH, BAT_HEIGHT);
 
 			//Draw player2's bat
-			DrawSprite(bat, player2_x, player2_y, BAT_WIDTH, BAT_HEIGHT);
+			DrawSprite(bat, player2_x, player2_y, BAT_WIDTH, BAT_HEIGHT2);
 		
 			//Draw ball
 			DrawSprite(ball, ball_x, ball_y, BALL_WIDTH, BALL_HEIGHT);
@@ -369,8 +382,8 @@ void gameStart(SubState a_subState)
 	timer = clock();
 
 	isHighTimeScore = false;
-	float posy = ((miny + maxy) / 2)*1.45f;	
-	float posy2 = ((miny2 + maxy2) / 2)*1.45f;
+	float posy = 0;
+	float posy2 = 0;
 
 	switch (a_subState)
 	{
@@ -383,78 +396,40 @@ void gameStart(SubState a_subState)
 			break;
 
 		case UPDATE:
-
-			//startTimer = clock();
-
-			//Left pressed move left
-			//if (IsKeyDown(KEY_LEFT))
-			//	Rot -= 10.0f;
-
-			//Right pressed move right
-			//if (IsKeyDown(KEY_RIGHT))
-			//	Rot += 10.0f;
 			
-			if (miny!=700 && maxy!=0) {
-				if (abs(player1_y - posy) > threshold) {
-					player1_y = posy;
-				}
-			
-				if(player1_y<32) {
-					player1_y=32;
-				} else if(player1_y> SCREEN_HEIGHT-BAT_HEIGHT-32) {
-					player1_y= SCREEN_HEIGHT-BAT_HEIGHT-32;
-				}
-			}
+			posy = ((miny + maxy) / 2)*1.45f - 80;
+			posy2 = ((miny2 + maxy2) / 2)*1.45f - 80;
 
-			if (miny2!=700 && maxy2!=0) {
+			//check for false detect
+			if (abs(miny - maxy) < 150) {				
+				if (abs(player1_y - posy) > threshold) {					
+					player1_y = posy;					
+			
+					/*if(player1_y<32) {
+						player1_y=32;
+					} else if(player1_y> SCREEN_HEIGHT-BAT_HEIGHT-32) {
+						player1_y= SCREEN_HEIGHT-BAT_HEIGHT-32;
+					}*/
+				}
+			} 
+
+			if (abs(miny2 - maxy2) < 150) {
 				if (abs(player2_y - posy2) > threshold) {
 					player2_y = posy2;
 				}
 			
-				if(player2_y<32) {
+				/*if(player2_y<32) {
 					player2_y=32;
 				} else if(player2_y> SCREEN_HEIGHT-BAT_HEIGHT-32) {
 					player2_y= SCREEN_HEIGHT-BAT_HEIGHT-32;
-				}
+				}*/
 			}
-			//player2_y = ((miny2 + maxy2) / 2)*1.45f;
-			//Player1 Key UP
-			if (IsKeyDown(KEY_UP))
-			{
-				/*if (player1_y - 16 <= 0)
-					player1_y = 0 + 16;
-				else
-					player1_y -= 5;*/
-				
-			}
-		
-			//Player1 Key Down
-			if (IsKeyDown(KEY_DOWN))
-			{
-				/*if (player1_y + BAT_HEIGHT + 16 >= SCREEN_HEIGHT)
-					player1_y = SCREEN_HEIGHT - BAT_HEIGHT - 16;
-				else
-					player1_y += 5;*/
+			
 
 
-				//collect the current time
-				startTimer = timer;
-				startPositionY = player1_y;
-				//save current time to previous time for last time of keypressed
-				//collect the player bat position
-			}
-			else
-			{
-				//collect the current time
-				endTimer = timer;
-				endPositionY = player1_y;
-
-				//collect the player bat position
-				//calculate velocity of bat -> (New position of bat - Previous position of bat) / (current time - last time)
-			}
-
+			/*
 			//Player2 Key LShift (UP)
-			/*if (IsKeyDown(KEY_F2))
+			if (IsKeyDown(KEY_F2))
 			{
 				//startTimer = clock();
 
@@ -462,13 +437,13 @@ void gameStart(SubState a_subState)
 					player2_y = 0 + 32;}
 				else{
 					player2_y -= 5;}
-			}*/
+			}
 
 
 				//player2_y -= 5;
 
 			//Player2 Key LCtrl (DOWN)
-			/*if (IsKeyDown(KEY_F1))
+			if (IsKeyDown(KEY_F1))
 			{
 				//startTimer = clock();
 
@@ -476,8 +451,8 @@ void gameStart(SubState a_subState)
 					player2_y = SCREEN_HEIGHT - BAT_HEIGHT - 16;}
 				else{
 					player2_y += 5;}
-			}*/
-
+			}
+			*/
 
 				//player2_y += 5;
 
@@ -498,7 +473,7 @@ void gameStart(SubState a_subState)
 
 			if ((ball_x >= player2_x + BAT_WIDTH) || 
 				(ball_x + BALL_WIDTH <= player2_x) ||
-				(ball_y >= player2_y + BAT_HEIGHT) ||
+				(ball_y >= player2_y + BAT_HEIGHT2) ||
 				(ball_y + BALL_HEIGHT <= player2_y))
 			{
 				// Do Nothing as Ball is not colliding with bat
@@ -529,7 +504,7 @@ void gameStart(SubState a_subState)
 			}
 
 			//Check if ball has hit on Player 2's wall. If yes, Player1 gets ONE score
-			if (ball_x <= 0+16)
+			if (ball_x <= 16)
 			{
 				player1Score += 1;
 				initialisePlayersBallPosition();
@@ -552,19 +527,19 @@ void gameStart(SubState a_subState)
 			ClearScreen();
 
 			//Draw background
-			for (int y=0; y < 24; y++)
+			/*for (int y=0; y < 24; y++)
 			{
 				for (int x=0; x < 32; x++)
 				{
 					DrawSprite(g_aBackground[y][x], 32.0f*x, 32.0f*y,32, 32);
 				}
-			}
+			}*/
 
 			//Draw player1's bat
 			DrawSprite(bat, player1_x, player1_y, BAT_WIDTH, BAT_HEIGHT);
 
 			//Draw player2's bat
-			DrawSprite(bat, player2_x, player2_y, BAT_WIDTH, BAT_HEIGHT);
+			DrawSprite(bat, player2_x, player2_y, BAT_WIDTH, BAT_HEIGHT2);
 		
 			//Draw ball
 			DrawSprite(ball, ball_x, ball_y, BALL_WIDTH, BALL_HEIGHT);
@@ -670,7 +645,7 @@ void scoreMenu(SubState a_subState)
 			DrawSprite(bat, player1_x, player1_y, BAT_WIDTH, BAT_HEIGHT);
 
 			//Draw player2's bat
-			DrawSprite(bat, player2_x, player2_y, BAT_WIDTH, BAT_HEIGHT);
+			DrawSprite(bat, player2_x, player2_y, BAT_WIDTH, BAT_HEIGHT2);
 		
 			//Draw ball
 			DrawSprite(ball, ball_x, ball_y, BALL_WIDTH, BALL_HEIGHT);
@@ -838,7 +813,7 @@ void highScore(SubState a_subState)
 			DrawSprite(bat, player1_x, player1_y, BAT_WIDTH, BAT_HEIGHT);
 
 			//Draw player2's bat
-			DrawSprite(bat, player2_x, player2_y, BAT_WIDTH, BAT_HEIGHT);
+			DrawSprite(bat, player2_x, player2_y, BAT_WIDTH, BAT_HEIGHT2);
 
 			//Draw ball
 			DrawSprite(ball, ball_x, ball_y, BALL_WIDTH, BALL_HEIGHT);
@@ -941,11 +916,11 @@ void initialisePlayersBallPosition()
 {
 	//initialize position for player1 bat
 	player1_x = 900;
-	player1_y = 350;
+	player1_y = 32;
 
 	//initialize position for player2 bat
 	player2_x = 50;
-	player2_y = 350;
+	player2_y = 32;
 
 	// initialize ball position
 	ball_x = 512;
