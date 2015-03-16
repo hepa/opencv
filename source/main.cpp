@@ -1,29 +1,26 @@
-//\====================================================================================
-//\ Author: Peter.Chui
-//\ Date  : 24 July 2012
-//\ About : main.cpp - Defines the entry point for our Simple SDL Project
-//\====================================================================================
-
 #include <opencv\cvaux.h>
 #include <opencv\highgui.h>
 #include <opencv\cxcore.h>
 
 #include <Windows.h>
-#include "GL_Functions.h"
-#include "pctimer.h"
 #include <string>
 #include <cmath>
 #include <crtdbg.h>
 #include <time.h>
 
-//#include <iostream>
-//#include <fstream>
+#include "GL_Functions.h"
+#include "pctimer.h"
 
 using namespace std;
 
-// don't move bat within this value change
-float threshold = 9.0f;
+#define WEBCAM_RESOLUTION_HEIGHT	640
+#define WEBCAM_RESOLUTION_WIDTH		480
+#define SKIP_FRAME_NUMBER			1
+#define BALL_SPEED					26
+#define THRESHOLD					9
 
+// don't move bat within this value change
+float threshold = THRESHOLD;
 int false_detects = 0;
 
 enum State {
@@ -45,15 +42,9 @@ enum SubState{
 
 State g_GameState = STARTUP;
 State g_NextGameState = MAIN_MENU;
-//State g_NextGameState = GAME;
-
-//global variables
 
 // multi-dimension array for storing which texture to draw on the background
 int g_aBackground[24][32];
-
-//ifstream fin;
-//fin.open("./images/bkgTile.txt");
 
 // constant screen dimension
 const float SCREEN_WIDTH = 1024;
@@ -75,16 +66,15 @@ int ball;
 //position for player1 bat
 float player1_x = 900;
 float player1_y = 500;
-//float prev_player1_y = 500;
 
 //position for player2 bat
 float player2_x = 50;
 float player2_y = 32;
-//float prev_player2_y = 100;
 
 //Constant dimension for bat
 const float BAT_WIDTH = 30;
 const float BAT_HEIGHT = 100;
+//only for testing purposes
 const float BAT_HEIGHT2 = 800;
 
 //Constant dimension for ball
@@ -95,8 +85,8 @@ const float BALL_HEIGHT = 30;
 float ball_x;
 float ball_y;
 
-float ballspeed_x = 26.0f;
-float ballspeed_y = 4.0f;
+float ballspeed_x = BALL_SPEED;
+float ballspeed_y = ballspeed_x / 4;
 
 int player1Score = 0;
 int player2Score = 0;
@@ -107,8 +97,6 @@ int highTimeScore = 0;
 bool isHighTimeScore = false;
 
 int a_highTimeScore[5] = {0,0,0,0,0};
-
-//float Rot = 0;
 
 void runGameState(SubState a_sstate);
 void initialisePlayersBallPosition();
@@ -121,8 +109,8 @@ clock_t startTimer;
 float startPositionY;
 clock_t endTimer;
 float endPositionY;
-int col, row, z, y, maxx = 0, maxy = 0, minx = 700, miny = 700;
-int maxx2 = 0, maxy2 = 0, minx2 = 700, miny2 = 700;
+int col, row, y, maxy = 0, miny = 700;
+int maxy2 = 0, miny2 = 700;
 
 
 /****************************************************************************/
@@ -133,10 +121,9 @@ int maxx2 = 0, maxy2 = 0, minx2 = 700, miny2 = 700;
 /****************************************************************************/
 int main(int argc, char* argv[])
 {
-	//Lets open the window and initialize openGL
 	InitGL(SCREEN_WIDTH,SCREEN_HEIGHT);
 
-	CvSize size1280x720 = cvSize(640, 480);
+	CvSize size640x480 = cvSize(WEBCAM_RESOLUTION_HEIGHT, WEBCAM_RESOLUTION_WIDTH);
 
 	CvCapture* p_capWebcam;
 
@@ -144,24 +131,17 @@ int main(int argc, char* argv[])
 	IplImage* p_imgProcessed;
 	IplImage* p_imgProcessed_hsv;
 	IplImage* p_imgProcessed_blue_cut;
-	IplImage* p_imgProcessed_yellow_cut;
-
-
-
-	CvMemStorage* p_strStorage;
-
-	CvSeq* p_seqCircles;
+	IplImage* p_imgProcessed_red_cut;	
 
 	
-	int in_process = 1;
+	int skip_frame = SKIP_FRAME_NUMBER;
 	uchar b, g, r;
 	uchar b2, g2, r2;
 
-	float* p_fltXYRadius = NULL;
 	int i;
 	char charCheckForEscKey;
 
-	p_capWebcam = cvCreateCameraCapture(-1);//cvCaptureFromAVI("D:\2015-02-26-1711-234.avi");
+	p_capWebcam = cvCreateCameraCapture(-1);
 	if (p_capWebcam == NULL) {
 		printf("ERROR: capture is null. \n");
 		getchar();
@@ -170,16 +150,17 @@ int main(int argc, char* argv[])
 
 	assert(p_capWebcam);
 
-	cvNamedWindow("Original", CV_WINDOW_AUTOSIZE);
+	//cvNamedWindow("Original", CV_WINDOW_AUTOSIZE);
 	cvNamedWindow("Processed_yellow", CV_WINDOW_AUTOSIZE);
 	cvNamedWindow("Processed_blue", CV_WINDOW_AUTOSIZE);
 	
-	p_imgProcessed = cvCreateImage(size1280x720, IPL_DEPTH_8U, 1);
-	p_imgProcessed_hsv = cvCreateImage(size1280x720, IPL_DEPTH_8U, 3);
-	p_imgProcessed_blue_cut = cvCreateImage(size1280x720, IPL_DEPTH_8U, 1);
-	p_imgProcessed_yellow_cut = cvCreateImage(size1280x720, IPL_DEPTH_8U, 1);
+	p_imgProcessed = cvCreateImage(size640x480, IPL_DEPTH_8U, 1);
+	p_imgProcessed_hsv = cvCreateImage(size640x480, IPL_DEPTH_8U, 3);
+	p_imgProcessed_blue_cut = cvCreateImage(size640x480, IPL_DEPTH_8U, 1);
+	p_imgProcessed_red_cut = cvCreateImage(size640x480, IPL_DEPTH_8U, 1);
 	
 	int db = 0;
+	bool elso_talalt;
 
 	while (FrameworkUpdate() && g_GameState != EXIT) //Do some secret stuff, 
 	{
@@ -202,9 +183,10 @@ int main(int argc, char* argv[])
 			break;
 		}		
 		
+		// RGB check for red.
 		//cvInRangeS(p_imgOriginal, CV_RGB(160, 0, 0), CV_RGB(255, 60, 60), p_imgProcessed);
 
-		//convert rgb to hsv picture
+		//convert RGB to HSV picture
 		cvCvtColor(p_imgOriginal, p_imgProcessed_hsv, CV_BGR2HSV);
 
 		//yellow color range
@@ -217,26 +199,19 @@ int main(int argc, char* argv[])
 
 		//cut picture for two color
 		cvInRangeS(p_imgProcessed_hsv, hsv_min_blue, hsv_max_blue, p_imgProcessed_blue_cut);
-		cvInRangeS(p_imgProcessed_hsv, hsv_min_yellow, hsv_max_yellow, p_imgProcessed_yellow_cut);
-		//cvInRangeS(p_imgOriginal, CV_RGB(160, 0, 0), CV_RGB(255, 60, 60), p_imgProcessed);
+		cvInRangeS(p_imgProcessed_hsv, hsv_min_yellow, hsv_max_yellow, p_imgProcessed_red_cut);
 
-		if (in_process == 0) {
-			maxy = 0; miny = 700;
-			maxy2 = 0; miny2 = 700;
+		if (skip_frame == 0) {
+			maxy = 0; miny = WEBCAM_RESOLUTION_HEIGHT;
+			maxy2 = 0; miny2 = WEBCAM_RESOLUTION_HEIGHT;
+
 			for (y = 0; y < p_imgProcessed->height; y+=3)
 			{
+				elso_talalt = false;
 				for (col = 0; col < p_imgProcessed->width; col+=3)
 				{
-					int v1 = p_imgProcessed_yellow_cut->widthStep * y + col * 3;
-					b = p_imgProcessed_yellow_cut->imageData[v1];
-					//g = p_imgProcessed_yellow_cut->imageData[v1 + 1];
-					//r = p_imgProcessed_yellow_cut->imageData[v1 + 2];
-
-					int v2 = p_imgProcessed_blue_cut->widthStep * y + col * 3;
-					b2 = p_imgProcessed_blue_cut->imageData[v2];
-					//g2 = p_imgProcessed_blue_cut->imageData[v2+ 1];
-					//r2 = p_imgProcessed_blue_cut->imageData[v2 + 2];
-				
+					b = p_imgProcessed_red_cut->imageData[p_imgProcessed_red_cut->widthStep * y + col * 3];
+					b2 = p_imgProcessed_blue_cut->imageData[p_imgProcessed_blue_cut->widthStep * y + col * 3];
 
 					if (b == 255) {
 						if (y>maxy) {
@@ -245,7 +220,7 @@ int main(int argc, char* argv[])
 						if (y < miny) {
 							miny = y;												
 						}
-						break;
+						elso_talalt = true;
 					}
 
 					if (b2 == 255) {
@@ -255,21 +230,20 @@ int main(int argc, char* argv[])
 						if (y < miny2) {
 							miny2 = y;												
 						}
-						break;
+						if (elso_talalt) break;
 					}
 				}
 			}
-			in_process = 1;
-			//printf("%d %d\n", miny, maxy);
+			skip_frame = SKIP_FRAME_NUMBER;			
 		} else {
-			in_process--;
+			skip_frame--;
 		}
 		
 
 		//cvShowImage("Original", p_imgOriginal);
 		//cvShowImage("Original", p_imgOriginal);
-		//cvShowImage("Processed_blue", p_imgProcessed_blue_cut);
-		cvShowImage("Processed_yellow", p_imgProcessed_yellow_cut);
+		cvShowImage("Processed_blue", p_imgProcessed_blue_cut);
+		cvShowImage("Processed_yellow", p_imgProcessed_red_cut);
 
 			
 
@@ -277,7 +251,6 @@ int main(int argc, char* argv[])
 		runGameState(UPDATE);
 		runGameState(DRAW);
 
-		//Stop it from running too fast! Sleep ZZzzz
 		Sleep(1);		
 	} 
 
@@ -293,7 +266,6 @@ int main(int argc, char* argv[])
 	cvDestroyWindow("Original");
 	cvDestroyWindow("Processed");
 
-	//Quit!
 	return 0;
 }
 
@@ -399,30 +371,30 @@ void gameStart(SubState a_subState)
 			
 			posy = ((miny + maxy) / 2)*1.45f - 80;
 			posy2 = ((miny2 + maxy2) / 2)*1.45f - 80;
-
-			//check for false detect
-			if (abs(miny - maxy) < 150) {				
+			
+			if (abs(miny - maxy) < 150) {	//check for false detect
 				if (abs(player1_y - posy) > threshold) {					
 					player1_y = posy;					
 			
-					/*if(player1_y<32) {
+					if(player1_y<32) {
 						player1_y=32;
 					} else if(player1_y> SCREEN_HEIGHT-BAT_HEIGHT-32) {
 						player1_y= SCREEN_HEIGHT-BAT_HEIGHT-32;
-					}*/
+					}
+
 				}
 			} 
 
-			if (abs(miny2 - maxy2) < 150) {
+			if (abs(miny2 - maxy2) < 150) {	//check for false detect
 				if (abs(player2_y - posy2) > threshold) {
 					player2_y = posy2;
 				}
 			
-				/*if(player2_y<32) {
+				if(player2_y<32) {
 					player2_y=32;
 				} else if(player2_y> SCREEN_HEIGHT-BAT_HEIGHT-32) {
 					player2_y= SCREEN_HEIGHT-BAT_HEIGHT-32;
-				}*/
+				}
 			}
 			
 
@@ -484,12 +456,6 @@ void gameStart(SubState a_subState)
 				TimeScore ++;		//Increment Timer score by 1
 			}
 
-			//	//float timeOfTravel = (endTimer - startTimer) / CLOCKS_PER_SEC;
-			//	////float timeOfTravel = endTimer - startTimer;
-			//	//ballspeed_y += (endPositionY - startPositionY) / timeOfTravel;
-			//	//ballspeed_y = ballspeed_y / (ballspeed_y + 0.5f);
-
-
 			//Check if ball has bounced on the wall. If so, bounce back in opposite y direction
 			if ((ball_y + BALL_HEIGHT >= SCREEN_HEIGHT-16) || (ball_y < 0+16))
 				ballspeed_y *= -1;		//Change direction
@@ -525,15 +491,6 @@ void gameStart(SubState a_subState)
 
 			//Clear the screen, so previous frames don't build up
 			ClearScreen();
-
-			//Draw background
-			/*for (int y=0; y < 24; y++)
-			{
-				for (int x=0; x < 32; x++)
-				{
-					DrawSprite(g_aBackground[y][x], 32.0f*x, 32.0f*y,32, 32);
-				}
-			}*/
 
 			//Draw player1's bat
 			DrawSprite(bat, player1_x, player1_y, BAT_WIDTH, BAT_HEIGHT);
@@ -826,17 +783,6 @@ void highScore(SubState a_subState)
 
 
 
-
-			//for (int i=0; i<5; i++)
-			//{
-			//	sprintf(highscore,"%i", a_highTimeScore[i]);
-			//	if (a_highTimeScore[i] > 0)
-			//		DrawString(highscore, 350, 350+50*i, 4.0f);
-			//	else
-			//		DrawString("- N/A -", 350, 350+50*i, 4.0f);
-			//}
-
-
 			//Draw array of High Scores
 			for (int i=0; i<5; i++)
 			{
@@ -846,14 +792,6 @@ void highScore(SubState a_subState)
 				else
 					DrawString(" ", 500, 350+50*i, 4.0f);
 			}
-
-			//for (int i=0; i<5; i++)
-			//{
-			//	if (TimeScore > a_highTimeScore[i])
-			//		a_highTimeScore[i] = TimeScore;
-
-			//	break;
-			//}
 
 			//Display EXIT Message
 			DrawString("Press SPACEBAR to EXIT", 275, 600, 2.0f);
