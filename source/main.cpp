@@ -18,6 +18,7 @@ using namespace std;
 #define SKIP_FRAME_NUMBER			1
 #define BALL_SPEED					26
 #define THRESHOLD					9
+#define FALSE_DETECTION_THRESHOLD	170
 
 // don't move bat within this value change
 float threshold = THRESHOLD;
@@ -151,7 +152,7 @@ int main(int argc, char* argv[])
 	assert(p_capWebcam);
 
 	//cvNamedWindow("Original", CV_WINDOW_AUTOSIZE);
-	cvNamedWindow("Processed_yellow", CV_WINDOW_AUTOSIZE);
+	cvNamedWindow("Processed_red", CV_WINDOW_AUTOSIZE);
 	cvNamedWindow("Processed_blue", CV_WINDOW_AUTOSIZE);
 	
 	p_imgProcessed = cvCreateImage(size640x480, IPL_DEPTH_8U, 1);
@@ -160,7 +161,7 @@ int main(int argc, char* argv[])
 	p_imgProcessed_red_cut = cvCreateImage(size640x480, IPL_DEPTH_8U, 1);
 	
 	int db = 0;
-	bool elso_talalt;
+	bool found_white_pixel;
 
 	while (FrameworkUpdate() && g_GameState != EXIT) //Do some secret stuff, 
 	{
@@ -207,7 +208,7 @@ int main(int argc, char* argv[])
 
 			for (y = 0; y < p_imgProcessed->height; y+=3)
 			{
-				elso_talalt = false;
+				found_white_pixel = false;
 				for (col = 0; col < p_imgProcessed->width; col+=3)
 				{
 					b = p_imgProcessed_red_cut->imageData[p_imgProcessed_red_cut->widthStep * y + col * 3];
@@ -220,7 +221,7 @@ int main(int argc, char* argv[])
 						if (y < miny) {
 							miny = y;												
 						}
-						elso_talalt = true;
+						found_white_pixel = true;
 					}
 
 					if (b2 == 255) {
@@ -230,7 +231,7 @@ int main(int argc, char* argv[])
 						if (y < miny2) {
 							miny2 = y;												
 						}
-						if (elso_talalt) break;
+						if (found_white_pixel) break;
 					}
 				}
 			}
@@ -243,7 +244,7 @@ int main(int argc, char* argv[])
 		//cvShowImage("Original", p_imgOriginal);
 		//cvShowImage("Original", p_imgOriginal);
 		cvShowImage("Processed_blue", p_imgProcessed_blue_cut);
-		cvShowImage("Processed_yellow", p_imgProcessed_red_cut);
+		cvShowImage("Processed_red", p_imgProcessed_red_cut);
 
 			
 
@@ -372,7 +373,7 @@ void gameStart(SubState a_subState)
 			posy = ((miny + maxy) / 2)*1.45f - 80;
 			posy2 = ((miny2 + maxy2) / 2)*1.45f - 80;
 			
-			if (abs(miny - maxy) < 150) {	//check for false detect
+			if (abs(miny - maxy) < FALSE_DETECTION_THRESHOLD) {	//check for false detect
 				if (abs(player1_y - posy) > threshold) {					
 					player1_y = posy;					
 			
@@ -385,7 +386,7 @@ void gameStart(SubState a_subState)
 				}
 			} 
 
-			if (abs(miny2 - maxy2) < 150) {	//check for false detect
+			if (abs(miny2 - maxy2) < FALSE_DETECTION_THRESHOLD) {	//check for false detect
 				if (abs(player2_y - posy2) > threshold) {
 					player2_y = posy2;
 				}
@@ -491,6 +492,14 @@ void gameStart(SubState a_subState)
 
 			//Clear the screen, so previous frames don't build up
 			ClearScreen();
+
+			for (int y=0; y < 24; y++)
+			{
+				for (int x=0; x < 32; x++)
+				{
+					DrawSprite(g_aBackground[y][x], 32.0f*x, 32.0f*y,32, 32);
+				}
+			}			
 
 			//Draw player1's bat
 			DrawSprite(bat, player1_x, player1_y, BAT_WIDTH, BAT_HEIGHT);
