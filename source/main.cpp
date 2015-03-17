@@ -16,7 +16,7 @@ using namespace std;
 #define WEBCAM_RESOLUTION_HEIGHT	640
 #define WEBCAM_RESOLUTION_WIDTH		480
 #define SKIP_FRAME_NUMBER			1
-#define BALL_SPEED					26
+#define BALL_SPEED					12
 #define THRESHOLD					9
 #define FALSE_DETECTION_THRESHOLD	170
 
@@ -40,6 +40,9 @@ enum SubState{
 	DRAW,
 	CLEANUP
 };
+
+bool in_wait;
+bool in_main;
 
 State g_GameState = STARTUP;
 State g_NextGameState = MAIN_MENU;
@@ -76,7 +79,7 @@ float player2_y = 32;
 const float BAT_WIDTH = 30;
 const float BAT_HEIGHT = 100;
 //only for testing purposes
-const float BAT_HEIGHT2 = 800;
+const float BAT_HEIGHT2 = 100;
 
 //Constant dimension for ball
 const float BALL_WIDTH = 30;
@@ -110,8 +113,8 @@ clock_t startTimer;
 float startPositionY;
 clock_t endTimer;
 float endPositionY;
-int col, row, y, maxy = 0, miny = 700;
-int maxy2 = 0, miny2 = 700;
+int col, row, y, maxy = 0, miny = 700, minx = 500, maxx = 0;
+int maxy2 = 0, miny2 = 700, minx2 = 500, maxx2 = 0;
 
 
 /****************************************************************************/
@@ -149,16 +152,24 @@ int main(int argc, char* argv[])
 		return(-1);
 	}
 
-	assert(p_capWebcam);
+	//assert(p_capWebcam);
 
 	//cvNamedWindow("Original", CV_WINDOW_AUTOSIZE);
-	cvNamedWindow("Processed_red", CV_WINDOW_AUTOSIZE);
-	cvNamedWindow("Processed_blue", CV_WINDOW_AUTOSIZE);
+	//cvNamedWindow("Processed_red", CV_WINDOW_AUTOSIZE);
+	//cvNamedWindow("Processed_blue", CV_WINDOW_AUTOSIZE);
 	
 	p_imgProcessed = cvCreateImage(size640x480, IPL_DEPTH_8U, 1);
 	p_imgProcessed_hsv = cvCreateImage(size640x480, IPL_DEPTH_8U, 3);
 	p_imgProcessed_blue_cut = cvCreateImage(size640x480, IPL_DEPTH_8U, 1);
 	p_imgProcessed_red_cut = cvCreateImage(size640x480, IPL_DEPTH_8U, 1);
+
+	//red color range
+			CvScalar hsv_min_red = cvScalar(160, 140, 125 );
+			CvScalar hsv_max_red = cvScalar(180,255,255 );
+		
+			//blue color range
+			CvScalar hsv_min_blue = cvScalar(80, 120,120 );
+			CvScalar hsv_max_blue = cvScalar(130,255,255 );
 	
 	int db = 0;
 	bool found_white_pixel;
@@ -177,34 +188,35 @@ int main(int argc, char* argv[])
 
 		//--------------------
 
-		p_imgOriginal = cvRetrieveFrame(p_capWebcam);
-		if (p_imgOriginal == NULL) {
+		if (skip_frame == 0) {
+			p_imgOriginal = cvRetrieveFrame(p_capWebcam);
+			skip_frame = SKIP_FRAME_NUMBER;
+
+			// RGB check for red.
+			//cvInRangeS(p_imgOriginal, CV_RGB(160, 0, 0), CV_RGB(255, 60, 60), p_imgProcessed);
+
+			//convert RGB to HSV picture
+			cvCvtColor(p_imgOriginal, p_imgProcessed_hsv, CV_BGR2HSV);			
+
+			//cut picture for two color
+			cvInRangeS(p_imgProcessed_hsv, hsv_min_blue, hsv_max_blue, p_imgProcessed_blue_cut);
+			cvInRangeS(p_imgProcessed_hsv, hsv_min_red, hsv_max_red, p_imgProcessed_red_cut);
+
+
+		} else {
+			skip_frame--;			
+		}
+		/*if (p_imgOriginal == NULL) {
 			printf("ERROR: image capture is null.");
 			getchar();
 			break;
-		}		
+		}*/		
 		
-		// RGB check for red.
-		//cvInRangeS(p_imgOriginal, CV_RGB(160, 0, 0), CV_RGB(255, 60, 60), p_imgProcessed);
-
-		//convert RGB to HSV picture
-		cvCvtColor(p_imgOriginal, p_imgProcessed_hsv, CV_BGR2HSV);
-
-		//yellow color range
-		CvScalar hsv_min_yellow = cvScalar(160, 140, 125 );
-		CvScalar hsv_max_yellow = cvScalar(180,255,255 );
-		
-		//blue color range
-		CvScalar hsv_min_blue = cvScalar(80, 120,120 );
-		CvScalar hsv_max_blue = cvScalar(130,255,255 );
-
-		//cut picture for two color
-		cvInRangeS(p_imgProcessed_hsv, hsv_min_blue, hsv_max_blue, p_imgProcessed_blue_cut);
-		cvInRangeS(p_imgProcessed_hsv, hsv_min_yellow, hsv_max_yellow, p_imgProcessed_red_cut);
-
-		if (skip_frame == 0) {
+		if (skip_frame == SKIP_FRAME_NUMBER) {
 			maxy = 0; miny = WEBCAM_RESOLUTION_HEIGHT;
-			maxy2 = 0; miny2 = WEBCAM_RESOLUTION_HEIGHT;
+			maxy2 = 0; miny2 = WEBCAM_RESOLUTION_HEIGHT;			
+			maxx = 0; minx = WEBCAM_RESOLUTION_WIDTH;
+			maxx2 = 0; minx2 = WEBCAM_RESOLUTION_WIDTH;
 
 			for (y = 0; y < p_imgProcessed->height; y+=3)
 			{
@@ -221,6 +233,13 @@ int main(int argc, char* argv[])
 						if (y < miny) {
 							miny = y;												
 						}
+						if (in_main && col < minx) {
+							minx = col;
+						}
+						if (in_main && col > maxx) {
+							maxx = col;
+						}
+
 						found_white_pixel = true;
 					}
 
@@ -231,15 +250,18 @@ int main(int argc, char* argv[])
 						if (y < miny2) {
 							miny2 = y;												
 						}
+						if (in_main && col < minx2) {
+							minx2 = col;
+						}
+						if (in_main && col > maxx2) {
+							maxx2 = col;
+						}
 						if (found_white_pixel) break;
 					}
 				}
-			}
-			skip_frame = SKIP_FRAME_NUMBER;			
-		} else {
-			skip_frame--;
-		}
-		
+			}		
+			//cvShowImage("Processed_red", p_imgProcessed_red_cut);
+		}		
 
 		//cvShowImage("Original", p_imgOriginal);
 		//cvShowImage("Original", p_imgOriginal);
@@ -252,6 +274,7 @@ int main(int argc, char* argv[])
 		runGameState(UPDATE);
 		runGameState(DRAW);
 
+		//cvWaitKey(10);
 		Sleep(1);		
 	} 
 
@@ -279,6 +302,7 @@ int main(int argc, char* argv[])
 /****************************************************************************/
 void mainMenu(SubState a_subState)
 {
+	int posx, posy;
 	switch (a_subState)
 	{
 		case INIT:
@@ -295,6 +319,8 @@ void mainMenu(SubState a_subState)
 
 		case UPDATE:
 			//Player press ENTER to start the game
+			in_main = true;			
+
 			if (IsKeyDown(KEY_F1))
 				g_NextGameState = GAME;  //Change to GAME State
 
@@ -319,6 +345,18 @@ void mainMenu(SubState a_subState)
 					DrawSprite(g_aBackground[y][x], 32.0f*x, 32.0f*y,32, 32);
 				}
 			}
+
+			printf("%d %d \n", minx, maxx);
+			if (abs(miny - maxy) < FALSE_DETECTION_THRESHOLD && abs(minx - maxx) < FALSE_DETECTION_THRESHOLD) {
+				//redraw
+				DrawString("*", posx , posy, 6.0f);
+			} else {
+				//calculate
+				posx = ((minx + maxx) / 2)*2.0f - 150;
+				posy = ((miny + maxy) / 2)*2.0f - 150;
+				DrawString("*", posx , posy, 6.0f);
+			}
+				
 
 			//Draw player1's bat
 			DrawSprite(bat, player1_x, player1_y, BAT_WIDTH, BAT_HEIGHT);
@@ -397,38 +435,6 @@ void gameStart(SubState a_subState)
 					player2_y= SCREEN_HEIGHT-BAT_HEIGHT-32;
 				}
 			}
-			
-
-
-			/*
-			//Player2 Key LShift (UP)
-			if (IsKeyDown(KEY_F2))
-			{
-				//startTimer = clock();
-
-				if (player2_y - 32 <= 0){
-					player2_y = 0 + 32;}
-				else{
-					player2_y -= 5;}
-			}
-
-
-				//player2_y -= 5;
-
-			//Player2 Key LCtrl (DOWN)
-			if (IsKeyDown(KEY_F1))
-			{
-				//startTimer = clock();
-
-				if (player2_y + BAT_HEIGHT + 16 >= SCREEN_HEIGHT){
-					player2_y = SCREEN_HEIGHT - BAT_HEIGHT - 16;}
-				else{
-					player2_y += 5;}
-			}
-			*/
-
-				//player2_y += 5;
-
 
 			//Check if ball has moved and collided with the bat
 			if ((ball_x >= player1_x + BAT_WIDTH) || 
@@ -532,7 +538,6 @@ void gameStart(SubState a_subState)
 	}
 }
 
-
 /****************************************************************************/
 // Function scoreMenu sub-state
 // parameters: sub state
@@ -557,10 +562,14 @@ void scoreMenu(SubState a_subState)
 			break;
 
 		case UPDATE:
-
+			
+			
 			//Player1 Key UP
-			if (IsKeyDown(KEY_SPACE) )
-			{
+			//if (IsKeyDown(KEY_SPACE) )
+			//{			
+			//printf("%d\n", in_wait);
+			if (in_wait || (player1Score + player2Score) >= 6) {
+				Sleep(1500);
 				// If 6 rounds of the game has completed
 				if ((player1Score + player2Score) >= 6)
 				{
@@ -589,8 +598,8 @@ void scoreMenu(SubState a_subState)
 					//Set next state back to the GAME
 					g_NextGameState = GAME;
 				}
-			}
 
+			} 						
 			break;
 
 		case DRAW:
@@ -705,11 +714,11 @@ void scoreMenu(SubState a_subState)
 						DrawString("SET Point!", 300, 300, 4.0f);
 
 						//Display Continue Message
-						DrawString("Press SPACEBAR to Continue", 275, 600, 2.0f);
+						DrawString("Press SPACEBAR to Continue", 275, 600, 2.0f);						
 					 }
 			}
 			else
-			{
+			{				
 				//Display Round number
 				sprintf(score,"Round %i", player1Score + player2Score);
 				DrawString(score, 300, 75, 7.0f);
@@ -719,7 +728,12 @@ void scoreMenu(SubState a_subState)
 				DrawString(score, 300, 200, 7.0f);
 
 			//Display Continue Message
-			DrawString("Press SPACEBAR to Continue", 275, 600, 2.0f);
+			//DrawString("Press SPACEBAR to Continue", 275, 600, 2.0f);
+			printf("%d\n", in_wait);
+			if (in_wait) in_wait = false;
+			else in_wait = true;			
+			printf("%d\n", in_wait);
+			printf("draw\n");
 			}
 
 			break;
@@ -739,9 +753,7 @@ void scoreMenu(SubState a_subState)
 void highScore(SubState a_subState)
 {
 	int scoreDisplayCount = 0;
-
-
-
+	
 	switch (a_subState)
 	{
 		case INIT:
@@ -789,8 +801,6 @@ void highScore(SubState a_subState)
 			//sprintf(highscore,"High Score: %i", highTimeScore);
 			//DrawString(highscore, 300, 300, 4.0f);
 			DrawString("Pong High Score", 275, 300, 4.0f);
-
-
 
 			//Draw array of High Scores
 			for (int i=0; i<5; i++)
@@ -841,10 +851,6 @@ void runGameState(SubState a_sstate)
 
 		case HIGHSCORE:
 			highScore(a_sstate);
-			break;
-
-		case HOWTOPLAY:
-		//howToPlay(a_sstate);
 			break;
 
 		case EXIT:
